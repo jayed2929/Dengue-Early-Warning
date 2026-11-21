@@ -1,0 +1,12 @@
+DENGUE DATASET AUDIT
+====================
+
+Rows: 31320
+Columns: 12
+Cities: 5
+Wards: 60
+Missing values: 0
+Duplicate ward-date pairs: 0
+Total dengue cases: 82572
+First date: 2016-01-04 00:00:00
+Last date: 2025-12-29 00:00:00
