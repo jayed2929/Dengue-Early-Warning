@@ -33,6 +33,15 @@ st.set_page_config(
     layout="wide"
 )
 
+# Load custom CSS
+CSS_PATH = PROJECT_ROOT / "assets" / "style.css"
+
+with open(CSS_PATH, encoding="utf-8") as css_file:
+    st.markdown(
+        f"<style>{css_file.read()}</style>",
+        unsafe_allow_html=True
+    )
+
 
 @st.cache_data
 def load_data():
@@ -202,41 +211,55 @@ try:
             prediction_df["ward_id"] == selected_ward
         ]
 
-    if prediction_df.empty:
-        st.warning("No prediction data available for this selection.")
+    
     else:
-                # Rank wards by predicted dengue cases
+        # Rank wards by predicted dengue cases
         prediction_df = prediction_df.sort_values(
             "predicted_cases_2to4w",
             ascending=False
         ).copy()
 
-        prediction_df["Rank"] = range(1, len(prediction_df) + 1)
-
-        # Risk summary
-        risk_counts = (
-            prediction_df["risk_level"]
-            .value_counts()
-            .reindex(
-                ["Low", "Medium", "High", "Critical"],
-                fill_value=0
-            )
+        prediction_df["Rank"] = range(
+            1, len(prediction_df) + 1
         )
 
-        col1, col2, col3, col4 = st.columns(4)
+        # Key prediction indicators
+        total_wards = len(prediction_df)
 
-        col1.metric("Low Risk", int(risk_counts["Low"]))
-        col2.metric("Medium Risk", int(risk_counts["Medium"]))
-        col3.metric("High Risk", int(risk_counts["High"]))
-        col4.metric("Critical Risk", int(risk_counts["Critical"]))
+        high_critical = prediction_df[
+            prediction_df["risk_level"].isin(
+                ["High", "Critical"]
+            )
+        ].shape[0]
 
-        st.markdown("### Ward-level Risk Predictions")
-                # Top 10 highest predicted wards
-        st.markdown("### 🏆 Top 10 Highest-Risk Wards")
+        st.markdown("### Prediction Overview")
 
-        top_10 = prediction_df.head(10).copy()
+        col1, col2, col3 = st.columns(3)
 
-        top_10_display = top_10[
+        col1.metric(
+            "Wards Assessed",
+            total_wards
+        )
+
+        col2.metric(
+            "High / Critical Risk",
+            high_critical
+        )
+
+        col3.metric(
+            "Prediction Period",
+            "Weeks +2 to +4"
+        )
+
+        st.caption(
+            "Estimates represent cumulative dengue cases "
+            "across the prediction window, not weekly case counts."
+        )
+
+        # Ranked ward prediction table
+        st.markdown("### Ward Risk Ranking")
+
+        top_10 = prediction_df.head(10)[
             [
                 "Rank",
                 "city",
@@ -248,108 +271,49 @@ try:
             columns={
                 "city": "City",
                 "ward_id": "Ward",
-                "predicted_cases_2to4w": "Predicted Cases (+2 to +4 weeks)",
+                "predicted_cases_2to4w": "Estimated Cases",
                 "risk_level": "Risk Level"
             }
         )
 
+        top_10["Estimated Cases"] = (
+            top_10["Estimated Cases"].round(2)
+        )
+
         st.dataframe(
-            top_10_display,
+            top_10,
             width="stretch",
             hide_index=True
         )
 
-                # Ward-level prediction comparison
-        st.markdown("### 📊 Ward-level Risk Ranking")
-
-        ranking_chart = px.bar(
-            prediction_df.head(15),
-            x="predicted_cases_2to4w",
-            y="ward_id",
-            color="city",
-            orientation="h",
-            hover_data=["risk_level", "date"],
-            title="Predicted Dengue Cases by Ward",
-            labels={
-                "predicted_cases_2to4w": "Predicted Cumulative Cases (+2 to +4 weeks)",
-                "ward_id": "Ward",
-                "city": "City"
-            }
-        )
-
-        ranking_chart.update_layout(
-            yaxis={"categoryorder": "total ascending"},
-            height=600
-        )
-
-        st.plotly_chart(
-            ranking_chart,
-            width="stretch"
-        )
-
-        display_predictions = prediction_df[
-            [
-                "date",
-                "city",
-                "ward_id",
-                "predicted_cases_2to4w",
-                "risk_level",
-            ]
-        ].sort_values(
-            "predicted_cases_2to4w",
-            ascending=False
-        )
-
-        display_predictions = display_predictions.rename(
-            columns={
-                "date": "Latest Observation",
-                "city": "City",
-                "ward_id": "Ward",
-                "predicted_cases_2to4w":
-                    "Predicted Cumulative Cases (+2 to +4 weeks)",
-                "risk_level": "Risk Level",
-            }
-        )
-
-        st.dataframe(
-            display_predictions,
-            use_container_width=True,
-            hide_index=True
-        )
-
-        # Highest predicted risk
-        highest_risk = prediction_df.iloc[
-            prediction_df["predicted_cases_2to4w"].argmax()
-        ]
-
-        st.warning(
-            f"Highest predicted risk: {highest_risk['city']} — "
-            f"{highest_risk['ward_id']} | "
-            f"Estimated cumulative cases: "
-            f"{highest_risk['predicted_cases_2to4w']:.1f} | "
-            f"Risk: {highest_risk['risk_level']}"
-        )
-
         # Model performance
-        st.markdown("### Model Performance")
+        with st.expander("Model Performance & Evaluation"):
+            metric1, metric2 = st.columns(2)
 
-        metric1, metric2 = st.columns(2)
+            metric1.metric(
+                "Test MAE",
+                f"{model_bundle['test_mae']:.3f}"
+            )
 
-        metric1.metric(
-            "Test MAE",
-            f"{model_bundle['test_mae']:.3f}"
-        )
+            metric2.metric(
+                "Test RMSE",
+                f"{model_bundle['test_rmse']:.3f}"
+            )
 
-        metric2.metric(
-            "Test RMSE",
-            f"{model_bundle['test_rmse']:.3f}"
-        )
+            st.caption(
+                "These metrics are from retrospective test data. "
+                "They do not guarantee future prediction accuracy."
+            )
 
+    
 except FileNotFoundError as error:
-    st.error(f"Required model or processed data file not found: {error}")
+    st.error(
+        f"Required model or processed data file not found: {error}"
+    )
 
 except Exception as error:
     st.error(f"Prediction error: {error}")
+
 
 
 # ============================================================
@@ -385,19 +349,59 @@ col4.metric(
 # DENGUE CASES OVER TIME
 # ============================================================
 
-st.markdown("## Dengue Case History")
+
+# ============================================================
+# DENGUE CASES OVER TIME
+# ============================================================
+
+st.markdown("## Historical Dengue Trend")
+
+if selected_ward == "All Wards":
+    # Aggregate weekly dengue cases across the selected city/cities
+    dengue_trend = (
+        filtered_df.groupby("date", as_index=False)
+        ["dengue_cases"].sum()
+    )
+
+    chart_title = "Total Weekly Dengue Cases"
+else:
+    # Show only the selected ward's historical cases
+    dengue_trend = (
+        filtered_df.groupby("date", as_index=False)
+        ["dengue_cases"].sum()
+    )
+
+    chart_title = f"Weekly Dengue Cases — {selected_ward}"
 
 dengue_chart = px.line(
-    filtered_df,
+    dengue_trend,
     x="date",
     y="dengue_cases",
-    color="ward_id" if selected_ward == "All Wards" else None,
-    title="Historical Dengue Cases",
+    title=chart_title,
+    markers=False,
     labels={
-        "date": "Date",
-        "dengue_cases": "Dengue Cases",
-        "ward_id": "Ward"
+        "date": "Week",
+        "dengue_cases": "Dengue Cases"
     }
+)
+
+dengue_chart.update_traces(
+    line=dict(color="#0D9488", width=2.5)
+)
+
+dengue_chart.update_layout(
+    height=380,
+    showlegend=False,
+    hovermode="x unified",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=20, r=20, t=60, b=20),
+    xaxis=dict(showgrid=False),
+    yaxis=dict(
+        title="Number of Dengue Cases",
+        rangemode="tozero",
+        gridcolor="#E2E8F0"
+    )
 )
 
 st.plotly_chart(
@@ -406,48 +410,79 @@ st.plotly_chart(
 )
 
 
+
+
 # ============================================================
-# WEATHER CHARTS
+# WEATHER TRENDS
 # ============================================================
 
 st.markdown("## Weather Trends")
 
-weather_col1, weather_col2 = st.columns(2)
+# Aggregate weather values by date across the selected wards
+weather_trend = (
+    filtered_df.groupby("date", as_index=False)
+    .agg({
+        "rainfall_mm": "mean",
+        "relative_humidity_pct": "mean",
+        "avg_temp_c": "mean"
+    })
+)
 
-with weather_col1:
-    rainfall_chart = px.line(
-        filtered_df,
-        x="date",
-        y="rainfall_mm",
-        title="Weekly Rainfall",
-        labels={
-            "date": "Date",
-            "rainfall_mm": "Rainfall (mm)"
-        }
+weather_options = {
+    "Rainfall": {
+        "column": "rainfall_mm",
+        "label": "Average Weekly Rainfall (mm)"
+    },
+    "Humidity": {
+        "column": "relative_humidity_pct",
+        "label": "Average Relative Humidity (%)"
+    },
+    "Temperature": {
+        "column": "avg_temp_c",
+        "label": "Average Temperature (°C)"
+    }
+}
+
+selected_weather = st.selectbox(
+    "Select Weather Indicator",
+    list(weather_options.keys())
+)
+
+weather_config = weather_options[selected_weather]
+
+weather_chart = px.line(
+    weather_trend,
+    x="date",
+    y=weather_config["column"],
+    title=f"{selected_weather} Trend Over Time",
+    labels={
+        "date": "Week",
+        weather_config["column"]: weather_config["label"]
+    }
+)
+
+weather_chart.update_traces(
+    line=dict(color="#0D9488", width=2)
+)
+
+weather_chart.update_layout(
+    height=350,
+    showlegend=False,
+    hovermode="x unified",
+    plot_bgcolor="white",
+    paper_bgcolor="white",
+    margin=dict(l=20, r=20, t=60, b=20),
+    xaxis=dict(showgrid=False),
+    yaxis=dict(
+        title=weather_config["label"],
+        gridcolor="#E2E8F0"
     )
+)
 
-    st.plotly_chart(
-        rainfall_chart,
-        use_container_width=True
-    )
-
-
-with weather_col2:
-    humidity_chart = px.line(
-        filtered_df,
-        x="date",
-        y="relative_humidity_pct",
-        title="Relative Humidity",
-        labels={
-            "date": "Date",
-            "relative_humidity_pct": "Humidity (%)"
-        }
-    )
-
-    st.plotly_chart(
-        humidity_chart,
-        use_container_width=True
-    )
+st.plotly_chart(
+    weather_chart,
+    use_container_width=True
+)
 
 
 # ============================================================

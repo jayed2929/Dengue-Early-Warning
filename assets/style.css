@@ -1,0 +1,118 @@
+/* ==========================================
+   DENGUEGUARD AI — DESIGN SYSTEM
+========================================== */
+
+:root {
+    --primary: #17365D;
+    --accent: #0D9488;
+    --background: #F5F7FA;
+    --surface: #FFFFFF;
+    --text: #17365D;
+    --muted: #64748B;
+    --border: #E2E8F0;
+}
+
+/* Main application */
+
+.stApp {
+    background-color: var(--background);
+    color: var(--text);
+}
+
+[data-testid="stHeader"] {
+    background: transparent;
+}
+
+/* Main content spacing */
+
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+    max-width: 1500px;
+}
+
+/* Sidebar */
+
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF;
+    border-right: 1px solid var(--border);
+}
+
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+    color: var(--primary);
+}
+
+/* Typography */
+
+h1,
+h2,
+h3 {
+    color: var(--primary) !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.4px;
+}
+
+p,
+label {
+    color: var(--text);
+}
+
+/* Metric cards */
+
+[data-testid="stMetric"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 2px 8px rgba(23, 54, 93, 0.04);
+}
+
+[data-testid="stMetricLabel"] {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+[data-testid="stMetricValue"] {
+    color: var(--primary);
+    font-weight: 750;
+}
+
+/* Buttons and interactive controls */
+
+.stButton>button {
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-weight: 600;
+}
+
+.stSelectbox [data-baseweb="select"] {
+    border-radius: 8px;
+}
+
+/* Alerts */
+
+[data-testid="stAlert"] {
+    border-radius: 10px;
+}
+
+/* Dataframes */
+
+[data-testid="stDataFrame"] {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Dividers */
+
+hr {
+    border-color: var(--border);
+}
+
+/* Captions */
+
+.stCaption {
+    color: var(--muted);
+}
