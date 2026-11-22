@@ -263,7 +263,7 @@ try:
         st.markdown("### 📊 Ward-level Risk Ranking")
 
         ranking_chart = px.bar(
-            prediction_df,
+            prediction_df.head(15),
             x="predicted_cases_2to4w",
             y="ward_id",
             color="city",
@@ -279,7 +279,7 @@ try:
 
         ranking_chart.update_layout(
             yaxis={"categoryorder": "total ascending"},
-            height=850
+            height=600
         )
 
         st.plotly_chart(
