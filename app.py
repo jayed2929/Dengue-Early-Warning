@@ -24,7 +24,7 @@ PROCESSED_DATA_PATH = (
     PROJECT_ROOT / "data" / "processed" / "weekly_features.csv"
 )
 
-MODEL_PATH = PROJECT_ROOT / "models" / "dengue_model.joblib"
+MODEL_PATH = PROJECT_ROOT / "models" / "dengue_model_compressed.joblib"
 
 
 st.set_page_config(

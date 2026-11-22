@@ -15,6 +15,9 @@ venv/
 models/*.joblib
 models/*.pkl
 
+# Keep the trained model required by the dashboard
+!models/dengue_model_compressed.joblib
+
 # Temporary files
 *.log
 .DS_Store
