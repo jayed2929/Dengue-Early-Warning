@@ -1,4 +1,5 @@
-
+import numpy as np
+import joblib
 from pathlib import Path
 
 import pandas as pd
@@ -19,6 +20,12 @@ DATA_PATH = (
     / "raw"
     / "hackathon_preli_dataset.xlsx"
 )
+
+PROCESSED_DATA_PATH = (
+    PROJECT_ROOT / "data" / "processed" / "weekly_features.csv"
+)
+
+MODEL_PATH = PROJECT_ROOT / "models" / "dengue_model.joblib"
 
 
 st.set_page_config(
@@ -50,6 +57,108 @@ def load_data():
     return df.sort_values("date")
 
 
+@st.cache_resource
+def load_model():
+    return joblib.load(MODEL_PATH)
+
+
+@st.cache_data
+def load_latest_predictions():
+    # Load engineered weather features
+    features_df = pd.read_csv(PROCESSED_DATA_PATH)
+    features_df["date"] = pd.to_datetime(features_df["date"])
+
+    # Recreate seasonal features used during model training
+    month = features_df["date"].dt.month
+    features_df["month_sin"] = np.sin(2 * np.pi * month / 12)
+    features_df["month_cos"] = np.cos(2 * np.pi * month / 12)
+
+    bundle = load_model()
+    features = bundle["features"]
+    thresholds = bundle["risk_thresholds"]
+
+    # Keep rows with all required model inputs
+    valid_df = features_df.dropna(subset=features).copy()
+
+    # Select the latest available observation for each ward
+    latest = (
+        valid_df.sort_values("date")
+        .groupby("ward_id", as_index=False)
+        .tail(1)
+        .copy()
+    )
+
+    # Generate predictions
+
+
+    print("\n========== INPUT DATA DEBUG ==========")
+
+    print("\nLatest observation dates:")
+    print(latest["date"].value_counts().head(10))
+
+    print("\nLatest feature values:")
+    print(
+        latest[
+            ["city", "ward_id", "date"]
+            + features[2:]
+        ].head(5).to_string(index=False)
+    )
+
+    print("\nFeature ranges in latest data:")
+    print(latest[features].describe().T)
+
+    print("\n======================================")
+
+
+
+    predictions = bundle["model"].predict(latest[features])
+    latest["predicted_cases_2to4w"] = np.maximum(predictions, 0)
+
+    # Assign risk categories
+    
+    # Assign risk categories
+    latest["risk_level"] = np.select(
+        [
+            latest["predicted_cases_2to4w"] < thresholds["medium"],
+            latest["predicted_cases_2to4w"] < thresholds["high"],
+            latest["predicted_cases_2to4w"] < thresholds["critical"],
+        ],
+        ["Low", "Medium", "High"],
+        default="Critical",
+    )
+
+    # Debug predictions
+    print("\n========== LATEST PREDICTION DEBUG ==========")
+
+    print("\nPrediction statistics:")
+    print(latest["predicted_cases_2to4w"].describe())
+
+    print("\nRisk distribution:")
+    print(latest["risk_level"].value_counts())
+
+    print("\nHighest predicted wards:")
+    print(
+        latest[
+            [
+                "city",
+                "ward_id",
+                "date",
+                "predicted_cases_2to4w",
+                "risk_level",
+            ]
+        ]
+        .sort_values(
+            "predicted_cases_2to4w",
+            ascending=False
+        )
+        .head(10)
+    )
+
+    return latest, bundle
+
+
+
+
 # Load dataset
 try:
     df = load_data()
@@ -62,12 +171,14 @@ except Exception as error:
 # HEADER
 # ============================================================
 
-st.title("🦟 DengueGuard AI")
+st.title("🦟 Dengue Early Warning")
 st.subheader("Urban Dengue Historical Monitoring Dashboard")
 
 st.info(
-    "This dashboard currently displays historical observations. "
-    "It does not yet generate machine-learning predictions."
+    "Model estimates are based on the latest available historical "
+    "observation (December 29, 2025). The model predicts cumulative "
+    "dengue cases across weeks +2, +3 and +4. These are experimental "
+    "historical-data-based estimates, not live forecasts."
 )
 
 
@@ -108,6 +219,120 @@ if selected_ward != "All Wards":
     filtered_df = filtered_df[
         filtered_df["ward_id"] == selected_ward
     ]
+
+
+# ============================================================
+# MACHINE LEARNING PREDICTIONS
+# ============================================================
+
+st.markdown("---")
+st.markdown("## 🤖 AI Dengue Risk Predictions")
+
+st.info(
+    "The model estimates cumulative dengue cases across "
+    "weeks +2, +3 and +4 using the latest available "
+    "historical weather observations."
+)
+
+try:
+    prediction_df, model_bundle = load_latest_predictions()
+
+    # Apply the dashboard's city and ward filters
+    if selected_city != "All Cities":
+        prediction_df = prediction_df[
+            prediction_df["city"] == selected_city
+        ]
+
+    if selected_ward != "All Wards":
+        prediction_df = prediction_df[
+            prediction_df["ward_id"] == selected_ward
+        ]
+
+    if prediction_df.empty:
+        st.warning("No prediction data available for this selection.")
+    else:
+        # Risk summary
+        risk_counts = (
+            prediction_df["risk_level"]
+            .value_counts()
+            .reindex(
+                ["Low", "Medium", "High", "Critical"],
+                fill_value=0
+            )
+        )
+
+        col1, col2, col3, col4 = st.columns(4)
+
+        col1.metric("Low Risk", int(risk_counts["Low"]))
+        col2.metric("Medium Risk", int(risk_counts["Medium"]))
+        col3.metric("High Risk", int(risk_counts["High"]))
+        col4.metric("Critical Risk", int(risk_counts["Critical"]))
+
+        st.markdown("### Ward-level Risk Predictions")
+
+        display_predictions = prediction_df[
+            [
+                "date",
+                "city",
+                "ward_id",
+                "predicted_cases_2to4w",
+                "risk_level",
+            ]
+        ].sort_values(
+            "predicted_cases_2to4w",
+            ascending=False
+        )
+
+        display_predictions = display_predictions.rename(
+            columns={
+                "date": "Latest Observation",
+                "city": "City",
+                "ward_id": "Ward",
+                "predicted_cases_2to4w":
+                    "Predicted Cumulative Cases (+2 to +4 weeks)",
+                "risk_level": "Risk Level",
+            }
+        )
+
+        st.dataframe(
+            display_predictions,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # Highest predicted risk
+        highest_risk = prediction_df.iloc[
+            prediction_df["predicted_cases_2to4w"].argmax()
+        ]
+
+        st.warning(
+            f"Highest predicted risk: {highest_risk['city']} — "
+            f"{highest_risk['ward_id']} | "
+            f"Estimated cumulative cases: "
+            f"{highest_risk['predicted_cases_2to4w']:.1f} | "
+            f"Risk: {highest_risk['risk_level']}"
+        )
+
+        # Model performance
+        st.markdown("### Model Performance")
+
+        metric1, metric2 = st.columns(2)
+
+        metric1.metric(
+            "Test MAE",
+            f"{model_bundle['test_mae']:.3f}"
+        )
+
+        metric2.metric(
+            "Test RMSE",
+            f"{model_bundle['test_rmse']:.3f}"
+        )
+
+except FileNotFoundError as error:
+    st.error(f"Required model or processed data file not found: {error}")
+
+except Exception as error:
+    st.error(f"Prediction error: {error}")
 
 
 # ============================================================
@@ -253,8 +478,8 @@ st.dataframe(
 
 
 st.caption(
-    "Dengue Early Warning| Historical data exploration | "
-    "Machine-learning predictions will be integrated separately."
+    "Risk thresholds are derived from training-data quantiles "
+    "and are not officially validated public-health alert levels."
 )
 
 
