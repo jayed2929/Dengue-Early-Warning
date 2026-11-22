@@ -68,6 +68,13 @@ The model uses numerical preprocessing with median imputation and categorical pr
 
 Random Forest was selected as the prototype regression model because it can learn nonlinear relationships between weather conditions, ward characteristics and dengue outcomes.
 
+### Design Choices and Trade-offs
+
+- **Random Forest:** Selected because it can capture nonlinear relationships between weather conditions, ward characteristics, and dengue outcomes. The trade-off is that it is less interpretable than simpler linear models and requires a serialized model file.
+- **Local inference:** Predictions run locally using the trained Joblib model. This avoids external prediction API dependencies, network latency, and API usage costs.
+- **Streamlit:** Selected to build an interactive dashboard quickly without maintaining a separate frontend and backend service. The trade-off is less flexibility than a fully custom web application.
+- **Historical data:** The prototype uses the supplied historical dataset rather than live weather feeds. This improves reproducibility but limits its ability to provide real-time outbreak forecasts.
+
 ## 4. Chronological Validation Strategy
 
 To reduce temporal leakage, observations are separated chronologically rather than randomly.
@@ -131,6 +138,12 @@ The application uses a locally stored serialized model instead of retraining dur
 - No external LLM API is required for the prediction pipeline.
 - No external prediction API is required by the current prototype.
 
+### LLM Token and Prompt Strategy
+
+The current application does not use an LLM for prediction or dashboard execution. Therefore, no LLM prompt strategy, token budget, or inference-token cost is applicable to the current implementation.
+
+AI assistance was used during development, but it is not part of the application's runtime prediction pipeline.
+
 ## 8. Limitations
 
 - Predictions are based on the latest available historical observations in the supplied dataset.
@@ -148,3 +161,14 @@ The application uses a locally stored serialized model instead of retraining dur
 - Streamlit
 - Plotly
 - OpenPyXL
+
+## Resilience and Error Handling
+
+The current prototype operates primarily through local data and model files.
+
+- **Missing files:** The application reports an error if required datasets or the trained model cannot be found.
+- **Data validation:** Preprocessing checks required columns, date values, numeric fields, missing values, and duplicate ward-date records.
+- **Missing feature values:** Lag and rolling-window calculations can produce missing values during initial observation periods. These are handled through the model's preprocessing pipeline where applicable.
+- **External service failures:** The current prediction pipeline does not depend on external LLM or prediction APIs. Therefore, external API rate limits and network failures are not part of its prediction workflow.
+
+The system is an experimental prototype and may require additional recovery mechanisms before production deployment.
