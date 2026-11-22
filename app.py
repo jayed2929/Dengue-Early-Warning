@@ -9,7 +9,6 @@ import streamlit as st
 
 # ============================================================
 # DENGUEGUARD AI - HISTORICAL DATA DASHBOARD
-# HOUR 2: CITY, WARD AND WEATHER EXPLORATION
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parent
@@ -91,30 +90,10 @@ def load_latest_predictions():
     # Generate predictions
 
 
-    print("\n========== INPUT DATA DEBUG ==========")
-
-    print("\nLatest observation dates:")
-    print(latest["date"].value_counts().head(10))
-
-    print("\nLatest feature values:")
-    print(
-        latest[
-            ["city", "ward_id", "date"]
-            + features[2:]
-        ].head(5).to_string(index=False)
-    )
-
-    print("\nFeature ranges in latest data:")
-    print(latest[features].describe().T)
-
-    print("\n======================================")
-
-
-
     predictions = bundle["model"].predict(latest[features])
     latest["predicted_cases_2to4w"] = np.maximum(predictions, 0)
 
-    # Assign risk categories
+    
     
     # Assign risk categories
     latest["risk_level"] = np.select(
@@ -128,31 +107,6 @@ def load_latest_predictions():
     )
 
     # Debug predictions
-    print("\n========== LATEST PREDICTION DEBUG ==========")
-
-    print("\nPrediction statistics:")
-    print(latest["predicted_cases_2to4w"].describe())
-
-    print("\nRisk distribution:")
-    print(latest["risk_level"].value_counts())
-
-    print("\nHighest predicted wards:")
-    print(
-        latest[
-            [
-                "city",
-                "ward_id",
-                "date",
-                "predicted_cases_2to4w",
-                "risk_level",
-            ]
-        ]
-        .sort_values(
-            "predicted_cases_2to4w",
-            ascending=False
-        )
-        .head(10)
-    )
 
     return latest, bundle
 
@@ -251,6 +205,14 @@ try:
     if prediction_df.empty:
         st.warning("No prediction data available for this selection.")
     else:
+                # Rank wards by predicted dengue cases
+        prediction_df = prediction_df.sort_values(
+            "predicted_cases_2to4w",
+            ascending=False
+        ).copy()
+
+        prediction_df["Rank"] = range(1, len(prediction_df) + 1)
+
         # Risk summary
         risk_counts = (
             prediction_df["risk_level"]
@@ -269,6 +231,61 @@ try:
         col4.metric("Critical Risk", int(risk_counts["Critical"]))
 
         st.markdown("### Ward-level Risk Predictions")
+                # Top 10 highest predicted wards
+        st.markdown("### 🏆 Top 10 Highest-Risk Wards")
+
+        top_10 = prediction_df.head(10).copy()
+
+        top_10_display = top_10[
+            [
+                "Rank",
+                "city",
+                "ward_id",
+                "predicted_cases_2to4w",
+                "risk_level"
+            ]
+        ].rename(
+            columns={
+                "city": "City",
+                "ward_id": "Ward",
+                "predicted_cases_2to4w": "Predicted Cases (+2 to +4 weeks)",
+                "risk_level": "Risk Level"
+            }
+        )
+
+        st.dataframe(
+            top_10_display,
+            width="stretch",
+            hide_index=True
+        )
+
+                # Ward-level prediction comparison
+        st.markdown("### 📊 Ward-level Risk Ranking")
+
+        ranking_chart = px.bar(
+            prediction_df,
+            x="predicted_cases_2to4w",
+            y="ward_id",
+            color="city",
+            orientation="h",
+            hover_data=["risk_level", "date"],
+            title="Predicted Dengue Cases by Ward",
+            labels={
+                "predicted_cases_2to4w": "Predicted Cumulative Cases (+2 to +4 weeks)",
+                "ward_id": "Ward",
+                "city": "City"
+            }
+        )
+
+        ranking_chart.update_layout(
+            yaxis={"categoryorder": "total ascending"},
+            height=850
+        )
+
+        st.plotly_chart(
+            ranking_chart,
+            width="stretch"
+        )
 
         display_predictions = prediction_df[
             [
