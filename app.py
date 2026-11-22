@@ -1,11 +1,18 @@
-import streamlit as st
-import pandas as pd
+
 from pathlib import Path
 
-# 1. Project directory
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+
+
+# ============================================================
+# DENGUEGUARD AI - HISTORICAL DATA DASHBOARD
+# HOUR 2: CITY, WARD AND WEATHER EXPLORATION
+# ============================================================
+
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-# 2. Dataset location
 DATA_PATH = (
     PROJECT_ROOT
     / "data"
@@ -13,147 +20,242 @@ DATA_PATH = (
     / "hackathon_preli_dataset.xlsx"
 )
 
-# 3. Page configuration
+
 st.set_page_config(
     page_title="DengueGuard AI",
     page_icon="🦟",
     layout="wide"
 )
 
-# 4. Load dataset
+
 @st.cache_data
 def load_data():
-    data = pd.read_excel(DATA_PATH)
-    data["date"] = pd.to_datetime(data["date"])
-    return data
+    df = pd.read_excel(DATA_PATH)
+
+    df["date"] = pd.to_datetime(df["date"])
+
+    numeric_columns = [
+        "dengue_cases",
+        "rainfall_mm",
+        "avg_temp_c",
+        "relative_humidity_pct",
+    ]
+
+    for column in numeric_columns:
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce"
+        )
+
+    return df.sort_values("date")
 
 
-# 5. Main application
-st.title("🦟 DengueGuard AI")
-
-st.subheader(
-    "Urban Dengue Outbreak Monitoring & Early Warning System"
-)
-
-st.info(
-    "Initial dashboard: displaying historical data. "
-    "ML predictions will be integrated in a later stage."
-)
-
-# 6. Load data safely
+# Load dataset
 try:
     df = load_data()
-
 except Exception as error:
     st.error(f"Could not load dataset: {error}")
     st.stop()
 
-# 7. Sidebar
-st.sidebar.title("Dashboard Filters")
 
-cities = sorted(df["city"].unique())
+# ============================================================
+# HEADER
+# ============================================================
+
+st.title("🦟 DengueGuard AI")
+st.subheader("Urban Dengue Historical Monitoring Dashboard")
+
+st.info(
+    "This dashboard currently displays historical observations. "
+    "It does not yet generate machine-learning predictions."
+)
+
+
+# ============================================================
+# SIDEBAR FILTERS
+# ============================================================
+
+st.sidebar.header("Dashboard Filters")
+
+cities = ["All Cities"] + sorted(
+    df["city"].dropna().unique().tolist()
+)
 
 selected_city = st.sidebar.selectbox(
     "Select City",
     cities
 )
 
-city_data = df[df["city"] == selected_city]
+filtered_df = df.copy()
 
-wards = sorted(city_data["ward_id"].unique())
+if selected_city != "All Cities":
+    filtered_df = filtered_df[
+        filtered_df["city"] == selected_city
+    ]
+
+
+wards = ["All Wards"] + sorted(
+    filtered_df["ward_id"].dropna().unique().tolist(),
+    key=str
+)
 
 selected_ward = st.sidebar.selectbox(
     "Select Ward",
     wards
 )
 
-ward_data = city_data[
-    city_data["ward_id"] == selected_ward
-].sort_values("date")
+if selected_ward != "All Wards":
+    filtered_df = filtered_df[
+        filtered_df["ward_id"] == selected_ward
+    ]
 
-# 8. Dashboard metrics
-st.subheader("Dataset Overview")
+
+# ============================================================
+# KEY PERFORMANCE INDICATORS
+# ============================================================
+
+st.markdown("## Historical Overview")
 
 col1, col2, col3, col4 = st.columns(4)
 
-with col1:
-    st.metric("Total Records", f"{len(df):,}")
-
-with col2:
-    st.metric("Total Cities", df["city"].nunique())
-
-with col3:
-    st.metric("Total Wards", df["ward_id"].nunique())
-
-with col4:
-    st.metric(
-        "Total Dengue Cases",
-        f"{df['dengue_cases'].sum():,}"
-    )
-
-# 9. Selected ward information
-st.divider()
-
-st.subheader("Selected Ward Analysis")
-
-st.write("City:", selected_city)
-st.write("Ward:", selected_ward)
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric(
-        "Total Historical Cases",
-        int(ward_data["dengue_cases"].sum())
-    )
-
-with col2:
-    st.metric(
-        "Average Rainfall",
-        f"{ward_data['rainfall_mm'].mean():.2f} mm"
-    )
-
-with col3:
-    st.metric(
-        "Average Humidity",
-        f"{ward_data['relative_humidity_pct'].mean():.2f}%"
-    )
-
-# 10. Dengue cases chart
-st.subheader("Historical Dengue Cases")
-
-st.line_chart(
-    ward_data.set_index("date")["dengue_cases"]
+col1.metric(
+    "Total Dengue Cases",
+    f"{filtered_df['dengue_cases'].sum():,.0f}"
 )
 
-# 11. Rainfall chart
-st.subheader("Historical Rainfall")
-
-st.bar_chart(
-    ward_data.set_index("date")["rainfall_mm"]
+col2.metric(
+    "Average Rainfall",
+    f"{filtered_df['rainfall_mm'].mean():.2f} mm"
 )
 
-# 12. Historical weather table
-st.subheader("Weather Information")
+col3.metric(
+    "Average Temperature",
+    f"{filtered_df['avg_temp_c'].mean():.2f} °C"
+)
 
-st.dataframe(
-    ward_data[
-        [
-            "date",
-            "avg_temp_c",
-            "max_temp_c",
-            "min_temp_c",
-            "rainfall_mm",
-            "relative_humidity_pct",
-            "dengue_cases"
-        ]
-    ].tail(20),
+col4.metric(
+    "Average Humidity",
+    f"{filtered_df['relative_humidity_pct'].mean():.2f}%"
+)
+
+
+# ============================================================
+# DENGUE CASES OVER TIME
+# ============================================================
+
+st.markdown("## Dengue Case History")
+
+dengue_chart = px.line(
+    filtered_df,
+    x="date",
+    y="dengue_cases",
+    color="ward_id" if selected_ward == "All Wards" else None,
+    title="Historical Dengue Cases",
+    labels={
+        "date": "Date",
+        "dengue_cases": "Dengue Cases",
+        "ward_id": "Ward"
+    }
+)
+
+st.plotly_chart(
+    dengue_chart,
     use_container_width=True
 )
 
-# 13. Footer
-st.divider()
+
+# ============================================================
+# WEATHER CHARTS
+# ============================================================
+
+st.markdown("## Weather Trends")
+
+weather_col1, weather_col2 = st.columns(2)
+
+with weather_col1:
+    rainfall_chart = px.line(
+        filtered_df,
+        x="date",
+        y="rainfall_mm",
+        title="Weekly Rainfall",
+        labels={
+            "date": "Date",
+            "rainfall_mm": "Rainfall (mm)"
+        }
+    )
+
+    st.plotly_chart(
+        rainfall_chart,
+        use_container_width=True
+    )
+
+
+with weather_col2:
+    humidity_chart = px.line(
+        filtered_df,
+        x="date",
+        y="relative_humidity_pct",
+        title="Relative Humidity",
+        labels={
+            "date": "Date",
+            "relative_humidity_pct": "Humidity (%)"
+        }
+    )
+
+    st.plotly_chart(
+        humidity_chart,
+        use_container_width=True
+    )
+
+
+# ============================================================
+# TEMPERATURE CHART
+# ============================================================
+
+temperature_chart = px.line(
+    filtered_df,
+    x="date",
+    y="avg_temp_c",
+    title="Average Temperature Over Time",
+    labels={
+        "date": "Date",
+        "avg_temp_c": "Average Temperature (°C)"
+    }
+)
+
+st.plotly_chart(
+    temperature_chart,
+    use_container_width=True
+)
+
+
+# ============================================================
+# DATA TABLE
+# ============================================================
+
+st.markdown("## Historical Records")
+
+st.dataframe(
+    filtered_df[
+        [
+            "date",
+            "city",
+            "ward_id",
+            "dengue_cases",
+            "rainfall_mm",
+            "avg_temp_c",
+            "relative_humidity_pct",
+        ]
+    ].sort_values("date", ascending=False),
+    use_container_width=True,
+    hide_index=True
+)
+
 
 st.caption(
-    "DengueGuard AI | EDU AI Engineering Hackathon 2026"
+    "Dengue Early Warning| Historical data exploration | "
+    "Machine-learning predictions will be integrated separately."
 )
+
+
+
